@@ -1,0 +1,17 @@
+L: 2e-6
+W: 12e-6
+mu_band: 13.7e-4
+T: 300
+tCH: 2e-9
+tDE: 10e-9
+me_factor: 0.3
+me_factor_HfO2: 0.11
+kDE: 18.5
+kCH: 9
+phiM: 5.65
+chiS: 4.7
+NCH: 4.9e25
+HfO2_offset: 2
+band_tail_list_2D: [{'Ntail2D': 6.5e16, 'Ttail2D': 475, 'nature': 'Acceptor'}]
+trap_list_3D: [{'Ntrap3D': 3e24, 'Ttrap3D': 3481.5, 'Etrap3D': -0.1, 'nature': 'Acceptor'}]
+Vds: 2
