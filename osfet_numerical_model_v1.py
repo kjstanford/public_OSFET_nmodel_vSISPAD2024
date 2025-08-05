@@ -1,6 +1,3 @@
-import sys
-sys.path.append("/home/kj2011/PhD_OSFET_modeling")
-from osfet_param_extraction_funs import *
 from helper_funs import *
 import re
 import ast
@@ -350,7 +347,7 @@ class OSFET_numerical_model_v1_0_0():
                 # Qch = self.Qfree + self.Qtail
                 Qf = self.Qfree
                 Qt = self.Qtail
-        Id = integrate.simpson(Iy_all, Vy_all)
+        Id = integrate.simpson(y=Iy_all, x=Vy_all)
         # return Id, Qch
         return Id, Qf, Qt
 
@@ -400,8 +397,7 @@ if __name__ == "__main__":
     num_params = {}
     # Define the directory to start the search (current working directory)
     start_directory = os.getcwd()
-    # with open(os.path.join(start_directory, "sispad_talk_baseline", "vlsi25_num_model_sispad_params.txt"), 'r') as file:
-    with open(os.path.join(start_directory, "test.txt"), 'r') as file:
+    with open(os.path.join(start_directory, "sispad_talk_baseline", "vlsi25_num_model_sispad_params.txt"), 'r') as file:
         for line in file:
             if ':' in line:
                 key, value = line.split(':', 1)
@@ -439,7 +435,6 @@ if __name__ == "__main__":
 
         N1 = len(np_d[:, 0])
         Vgs_sweep = np_d[:int(N1 / 2):1, 0]
-        # Vgs_sweep = np.arange(-1, 3 + 5e-3, 5e-3)
 
         # Qch_num_sweep, Id_num_sweep, Vgs_sweep = Id_full_sweep_parallel_v0(Vgs_sweep=Vgs_sweep, fet_name=osfet_dut_0, foo=foo_dut_0)
         Qf_num_sweep, Qt_num_sweep, Id_num_sweep, Vgs_sweep = Id_full_sweep_parallel_v0(Vgs_sweep=Vgs_sweep, fet_name=osfet_dut_0, foo=foo_dut_0)
