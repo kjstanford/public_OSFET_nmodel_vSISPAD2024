@@ -1,3 +1,7 @@
+import warnings
+# Suppress all warnings
+warnings.filterwarnings("ignore")
+
 from helper_funs import *
 import re
 import ast
@@ -359,6 +363,7 @@ def Id_full_sweep_parallel_v0(Vgs_sweep, fet_name, foo):
     t1 = time.time()
     outputs = multiple_workers(foo=foo, inputs=Vgs_sweep)
     t2 = time.time()
+    print()
     print('Time taken is ', t2 - t1, 's')
     # Id_sweep = np.array([id for id, qch in outputs])
     # Qch_sweep = np.array([qch for id, qch in outputs])
@@ -375,6 +380,7 @@ def IdVd_full_sweep_parallel_v0(Vds_sweep, fet_name, foo):
     t1 = time.time()
     outputs = multiple_workers(foo=foo, inputs=Vds_sweep)
     t2 = time.time()
+    print()
     print('Time taken is ', t2 - t1, 's')
     # Id_sweep = np.array([id for id, qch in outputs])
     # Qch_sweep = np.array([qch for id, qch in outputs])

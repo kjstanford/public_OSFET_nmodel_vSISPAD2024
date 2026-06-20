@@ -1,3 +1,7 @@
+import warnings
+# Suppress all warnings
+warnings.filterwarnings("ignore")
+
 from helper_funs import *
 import re
 import ast
@@ -64,7 +68,7 @@ class DGOSFET_numerical_model_v1_0_0():
         """
         self.OS_channel_grid = self.tDE + np.arange(0, self.tCH + self.OS_step_size, self.OS_step_size)
         xgrid = np.insert(self.OS_channel_grid, 0, 0)
-        xgrid = np.append(xgrid, self.tDE + self.tCH)
+        xgrid = np.append(xgrid, 2*self.tDE + self.tCH)
 
         # for trap_2D in self.trap_list_2D:
         #     xtrap2D = trap_2D['xtrap2D']
@@ -87,8 +91,7 @@ class DGOSFET_numerical_model_v1_0_0():
         """
         Compute FEM-based matrix for solving poisson equation
         """
-        self.sf = ((self.xgrid[self.grid_size - 1] - self.xgrid[self.grid_size - 2]) ** 2) / self.kfun(
-            self.xgrid[self.grid_size - 1])
+        self.sf = (self.OS_step_size ** 2) / self.kCH
         # print(self.sf)
 
         self.poisson_mat = np.diag(np.zeros(np.shape(self.xgrid)))
@@ -105,21 +108,13 @@ class DGOSFET_numerical_model_v1_0_0():
             self.poisson_mat[ii, ii + 1] = self.sf * (
                         self.kfun(self.xgrid[ii + 1]) / (self.xgrid[ii + 1] - self.xgrid[ii])) * (
                                                        2 / (self.xgrid[ii + 1] - self.xgrid[ii - 1]))
-        # self.poisson_mat[self.grid_size - 1, self.grid_size - 1] = self.sf * (
-        #             self.kfun(self.xgrid[self.grid_size - 1]) / (
-        #                 self.xgrid[self.grid_size - 1] - self.xgrid[self.grid_size - 2])) * (-1 / (
-        #             self.xgrid[self.grid_size - 1] - self.xgrid[self.grid_size - 2]))
-        # self.poisson_mat[self.grid_size - 1, self.grid_size - 2] = self.sf * (
-        #             self.kfun(self.xgrid[self.grid_size - 1]) / (
-        #                 self.xgrid[self.grid_size - 1] - self.xgrid[self.grid_size - 2])) * (1 / (
-        #             self.xgrid[self.grid_size - 1] - self.xgrid[self.grid_size - 2]))
 
     def poisson_solve(self, Vgs, Vy):
         """
         Initialize phigrid
         """
         self.phigrid[0] = Vgs - (self.phiM - self.chiS)
-        self.phigrid[1:self.grid_size-1] = self.phigrid[1:self.grid_size-1] * min(0, self.phigrid[0]) + self.phiT
+        self.phigrid[1:self.grid_size-1] = self.phigrid[1:self.grid_size-1] * min(0, Vgs - (self.phiM - self.chiS)) + self.phiT
         self.phigrid[-1] = Vgs - (self.phiM - self.chiS)
 
         Ms = sparse.csr_matrix(self.poisson_mat)  # sparse matrix version of poisson_mat
@@ -128,28 +123,11 @@ class DGOSFET_numerical_model_v1_0_0():
         Forcing function of the poisson equation calculated from the charges
         """
         def FFsolve(phigrid):
-            Qfree = lambda ii: 0 if self.xgrid[ii] <= self.tDE else q * self.N3D * FD_int_3D(
-                (phigrid[ii] - Vy) / self.phiT)
-            Qdop = lambda ii: 0 if self.xgrid[ii] <= self.tDE else -1 * q * self.NCH
-            Qfixed = lambda ii: sum([0 if self.xgrid[ii] != fixed_2D['xfixed'] \
-                                         else q * fixed_2D['Nfixed'] * (2 if ii < self.grid_size - 1 else 1) / (
-                        self.xgrid[min(ii + 1, self.grid_size - 1)] - self.xgrid[ii - 1]) \
-                                     for fixed_2D in self.fixed_charge_list_2D])
-            Qtrap2D = lambda ii: sum([0 if self.xgrid[ii] != trap_2D['xtrap2D'] \
-                                          else q * gaussian_states(Nt=trap_2D['Ntrap2D'],
-                                                                   Ep=trap_2D['Etrap2D'] - phigrid[ii],
-                                                                   Tt=trap_2D['Ttrap2D'], Ef=-Vy, T=self.T,
-                                                                   nature=trap_2D['nature']) * (
-                                                   2 if ii < self.grid_size - 1 else 1) / (
-                                                           self.xgrid[min(ii + 1, self.grid_size - 1)] - self.xgrid[
-                                                       ii - 1]) \
-                                      for trap_2D in self.trap_list_2D])
-            Qtrap3D = lambda ii: sum([0 if self.xgrid[ii] <= self.tDE \
-                                          else q * gaussian_states(Nt=trap_3D['Ntrap3D'],
-                                                                   Ep=trap_3D['Etrap3D'] - phigrid[ii],
-                                                                   Tt=trap_3D['Ttrap3D'], Ef=-Vy, T=self.T,
-                                                                   nature=trap_3D['nature']) for trap_3D in
-                                      self.trap_list_3D])
+            Qfree = lambda ii: 0 if self.xgrid[ii] <= self.tDE or self.xgrid[ii] >= self.tDE + self.tCH else q * self.N3D * FD_int_3D((phigrid[ii] - Vy) / self.phiT)
+            Qdop = lambda ii: 0 if self.xgrid[ii] <= self.tDE or self.xgrid[ii] >= self.tDE + self.tCH else -1 * q * self.NCH
+            Qfixed = lambda ii: sum([0 if self.xgrid[ii] != fixed_2D['xfixed'] else q * fixed_2D['Nfixed'] * (0 if ii == 0 or ii == self.grid_size - 1 else 2) / (self.xgrid[min(ii + 1, self.grid_size - 1)] - self.xgrid[max(ii - 1, 0)]) for fixed_2D in self.fixed_charge_list_2D])
+            Qtrap2D = lambda ii: sum([0 if self.xgrid[ii] != trap_2D['xtrap2D'] else q * gaussian_states(Nt=trap_2D['Ntrap2D'], Ep=trap_2D['Etrap2D'] - phigrid[ii], Tt=trap_2D['Ttrap2D'], Ef=-Vy, T=self.T, nature=trap_2D['nature']) * (0 if ii == 0 or ii == self.grid_size - 1 else 2) / (self.xgrid[min(ii + 1, self.grid_size - 1)] - self.xgrid[max(ii - 1, 0)]) for trap_2D in self.trap_list_2D])
+            Qtrap3D = lambda ii: sum([0 if self.xgrid[ii] <= self.tDE or self.xgrid[ii] >= self.tDE + self.tCH else q * gaussian_states(Nt=trap_3D['Ntrap3D'], Ep=trap_3D['Etrap3D'] - phigrid[ii], Tt=trap_3D['Ttrap3D'], Ef=-Vy, T=self.T, nature=trap_3D['nature']) for trap_3D in self.trap_list_3D])
 
             F = np.zeros(np.shape(self.xgrid))
             F[0] = Vgs - (self.phiM - self.chiS)
@@ -169,15 +147,14 @@ class DGOSFET_numerical_model_v1_0_0():
         From the solved phigrid calculate Qfree and Ec
         """
         self.Qfree_grid = np.array(
-            [0 if x <= self.tDE else q * self.N3D * FD_int_3D((phi - Vy) / self.phiT) for x, phi in
+            [0 if x <= self.tDE or x >= self.tDE + self.tCH else q * self.N3D * FD_int_3D((phi - Vy) / self.phiT) for x, phi in
              zip(self.xgrid, self.phigrid)])
         self.Ec_grid = np.array(
-            [self.HfO2_offset - phi if x <= self.tDE else -phi for x, phi in zip(self.xgrid, self.phigrid)])
+            [self.HfO2_offset - phi if x <= self.tDE or x >= self.tDE + self.tCH else -phi for x, phi in zip(self.xgrid, self.phigrid)])
         self.Qfree = 0
         for ii in range(1, self.grid_size - 1):
-            if self.xgrid[ii] > self.tDE:
+            if self.xgrid[ii] > self.tDE and self.xgrid[ii] < self.tDE + self.tCH:
                 self.Qfree += self.Qfree_grid[ii] * (self.xgrid[ii + 1] - self.xgrid[ii - 1]) / 2
-        self.Qfree += self.Qfree_grid[-1] * (self.xgrid[-1] - self.xgrid[-2])
         return None
 
     def schrodinger_solve(self, phigrid):
@@ -186,8 +163,8 @@ class DGOSFET_numerical_model_v1_0_0():
         """
         bias = 0  # Lanczos Bias
         t = hred ** 2 / (2 * q * self.me)  # schrodinger pre-factor
-        xgrid = self.xgrid[self.xgrid > self.tDE]
-        phigrid = phigrid[self.xgrid > self.tDE]
+        xgrid = self.xgrid[(self.xgrid > self.tDE) & (self.xgrid < self.tDE + self.tCH)]
+        phigrid = phigrid[(self.xgrid > self.tDE) & (self.xgrid < self.tDE + self.tCH)]
         Hmat = np.diag(np.zeros(np.shape(phigrid)))
 
         xgrid = np.insert(xgrid, 0, 2 * xgrid[0] - xgrid[1])
@@ -196,8 +173,7 @@ class DGOSFET_numerical_model_v1_0_0():
             jj = ii + 1
             if ii != len(phigrid) - 1:
                 Hmat[ii, ii + 1] = -2 * t / ((xgrid[jj + 1] - xgrid[jj]) * (xgrid[jj + 1] - xgrid[jj - 1]))
-            Hmat[ii, ii] = (2 / ((xgrid[jj + 1] - xgrid[jj])) + 2 / ((xgrid[jj] - xgrid[jj - 1]))) * t / (
-                        xgrid[jj + 1] - xgrid[jj - 1]) - phigrid[ii] + bias
+            Hmat[ii, ii] = (2 / ((xgrid[jj + 1] - xgrid[jj])) + 2 / ((xgrid[jj] - xgrid[jj - 1]))) * t / (xgrid[jj + 1] - xgrid[jj - 1]) - phigrid[ii] + bias
             if ii != 0:
                 Hmat[ii, ii - 1] = -2 * t / ((xgrid[jj] - xgrid[jj - 1]) * (xgrid[jj + 1] - xgrid[jj - 1]))
 
@@ -211,7 +187,8 @@ class DGOSFET_numerical_model_v1_0_0():
         Initialize phigrid
         """
         self.phigrid[0] = Vgs - (self.phiM - self.chiS)
-        self.phigrid[1:] = self.phigrid[1:] * min(0, self.phigrid[0]) + self.phiT
+        self.phigrid[1:self.grid_size-1] = self.phigrid[1:self.grid_size-1] * min(0, Vgs - (self.phiM - self.chiS)) + self.phiT
+        self.phigrid[-1] = Vgs - (self.phiM - self.chiS)
 
         Ms = sparse.csr_matrix(self.poisson_mat)  # sparse matrix version of poisson_mat
         """
@@ -221,59 +198,40 @@ class DGOSFET_numerical_model_v1_0_0():
             E, V = self.schrodinger_solve(phigrid)
             def Qfree(ii):
                 iiDE = np.where(self.xgrid == self.tDE)[0] + 1
-                if self.xgrid[ii] <= self.tDE:
+                if self.xgrid[ii] <= self.tDE or self.xgrid[ii] >= self.tDE + self.tCH:
                     return 0
                 else:
                     qfree = 0
                     for jj in range(len(E)):
-                        qfree += q * self.N2D * log(1 + exp((-E[jj] - Vy) / (kB * self.T))) * np.abs(
-                            V[ii - iiDE, jj] ** 2) * (2 if ii < self.grid_size - 1 else 1) / (
-                                             self.xgrid[min(ii + 1, self.grid_size - 1)] - self.xgrid[ii - 1])
+                        qfree += q * self.N2D * log(1 + exp((-E[jj] - Vy) / (kB * self.T))) * np.abs(V[ii - iiDE, jj] ** 2) * 2 / (self.xgrid[ii + 1] - self.xgrid[ii - 1])
                     return qfree
 
             def Qtail(ii):
                 iiDE = np.where(self.xgrid == self.tDE)[0] + 1
-                if self.xgrid[ii] <= self.tDE:
+                if self.xgrid[ii] <= self.tDE or self.xgrid[ii] >= self.tDE + self.tCH:
                     return 0
                 else:
-                    qtail = sum([q * exponential_states(Nt=tail_2D['Ntail2D'], Tt=tail_2D['Ttail2D'], Ep=E[0], Ef=-Vy,
-                                                        T=self.T, nature=tail_2D['nature']) * np.abs(
-                        V[ii - iiDE, 0] ** 2) * (2 if ii < self.grid_size - 1 else 1) / (
-                                             self.xgrid[min(ii + 1, self.grid_size - 1)] - self.xgrid[ii - 1])
-                                 for tail_2D in self.band_tail_list_2D])
+                    qtail = sum([q * exponential_states(Nt=tail_2D['Ntail2D'], Tt=tail_2D['Ttail2D'], Ep=E[0], Ef=-Vy, T=self.T, nature=tail_2D['nature']) * np.abs(V[ii - iiDE, 0] ** 2) * 2 / (self.xgrid[ii + 1] - self.xgrid[ii - 1]) for tail_2D in self.band_tail_list_2D])
                     return qtail
 
-            Qdop = lambda ii: 0 if self.xgrid[ii] <= self.tDE else -1 * q * self.NCH
+            Qdop = lambda ii: 0 if self.xgrid[ii] <= self.tDE or self.xgrid[ii] >= self.tDE + self.tCH else -1 * q * self.NCH
 
-            Qfixed = lambda ii: sum([0 if self.xgrid[ii] != fixed_2D['xfixed'] \
-                                         else q * fixed_2D['Nfixed'] * (2 if ii < self.grid_size - 1 else 1) / (
-                        self.xgrid[min(ii + 1, self.grid_size - 1)] - self.xgrid[ii - 1]) \
-                                     for fixed_2D in self.fixed_charge_list_2D])
+            Qfixed = lambda ii: sum([0 if self.xgrid[ii] != fixed_2D['xfixed'] else q * fixed_2D['Nfixed'] * (0 if ii == self.grid_size - 1 or ii == 0 else 2) / (self.xgrid[min(ii + 1, self.grid_size - 1)] - self.xgrid[max(0, ii - 1)]) for fixed_2D in self.fixed_charge_list_2D])
 
-            Qtrap2D = lambda ii: sum([0 if self.xgrid[ii] != trap_2D['xtrap2D'] \
-                                          else q * gaussian_states(Nt=trap_2D['Ntrap2D'],
-                                                                   Ep=trap_2D['Etrap2D'] - phigrid[ii],
-                                                                   Tt=trap_2D['Ttrap2D'], Ef=-Vy, T=self.T,
-                                                                   nature=trap_2D['nature']) * (
-                                                   2 if ii < self.grid_size - 1 else 1) / (
-                                                           self.xgrid[min(ii + 1, self.grid_size - 1)] - self.xgrid[
-                                                       ii - 1]) \
-                                      for trap_2D in self.trap_list_2D])
+            Qtrap2D = lambda ii: sum([0 if self.xgrid[ii] != trap_2D['xtrap2D'] else q * gaussian_states(Nt=trap_2D['Ntrap2D'], Ep=trap_2D['Etrap2D'] - phigrid[ii], Tt=trap_2D['Ttrap2D'], Ef=-Vy, T=self.T, nature=trap_2D['nature']) * (0 if ii == self.grid_size - 1 or ii == 0 else 2) / (self.xgrid[min(ii + 1, self.grid_size - 1)] - self.xgrid[max(0, ii - 1)]) for trap_2D in self.trap_list_2D])
 
-            Qtrap3D = lambda ii: sum([0 if self.xgrid[ii] <= self.tDE \
-                                          else q * gaussian_states(Nt=trap_3D['Ntrap3D'],
-                                                                   Ep=trap_3D['Etrap3D'] - phigrid[ii],
-                                                                   Tt=trap_3D['Ttrap3D'], Ef=-Vy, T=self.T,
-                                                                   nature=trap_3D['nature']) for trap_3D in
-                                      self.trap_list_3D])
+            Qtrap3D = lambda ii: sum([0 if self.xgrid[ii] <= self.tDE or self.xgrid[ii] >= self.tDE + self.tCH else q * gaussian_states(Nt=trap_3D['Ntrap3D'], Ep=trap_3D['Etrap3D'] - phigrid[ii], Tt=trap_3D['Ttrap3D'], Ef=-Vy, T=self.T, nature=trap_3D['nature']) for trap_3D in self.trap_list_3D])
 
             F = np.zeros(np.shape(self.xgrid))
             QFREE = np.zeros(np.shape(self.xgrid))
             QTAIL = np.zeros(np.shape(self.xgrid))
             F[0] = Vgs - (self.phiM - self.chiS)
+            F[-1] = Vgs - (self.phiM - self.chiS)
             QFREE[0] = Qfree(0)
+            QFREE[-1] = Qfree(self.grid_size - 1)
             QTAIL[0] = Qtail(0)
-            for ii in range(1, self.grid_size):
+            QTAIL[-1] = Qtail(self.grid_size - 1)
+            for ii in range(1, self.grid_size-1):
                 QFREE[ii] = Qfree(ii)
                 QTAIL[ii] = Qtail(ii)
                 F[ii] = (QFREE[ii] + QTAIL[ii] + Qfixed(ii) + Qtrap2D(ii) + Qtrap3D(ii) + Qdop(ii)) * self.sf / epso
@@ -307,19 +265,17 @@ class DGOSFET_numerical_model_v1_0_0():
         From the solved phigrid calculate Qfree and Ec
         """
         Eprint, Vprint = self.schrodinger_solve(self.phigrid)
-        print(f'Ground State at {Eprint[0] + self.phigrid[-1]}eV above reference level')
+        print(f'Ground State at {Eprint[0] + self.phigrid[self.xgrid <= (self.tDE + self.tCH / 2)][-1]}eV above reference level')
         self.Qfree_grid = QFREE
         self.Qtail_grid = QTAIL
         self.Ec_grid = np.array(
-            [self.HfO2_offset - phi if x <= self.tDE else -phi for x, phi in zip(self.xgrid, self.phigrid)])
+            [self.HfO2_offset - phi if x <= self.tDE or x >= self.tDE + self.tCH else -phi for x, phi in zip(self.xgrid, self.phigrid)])
         self.Qfree = 0
         self.Qtail = 0
         for ii in range(1, self.grid_size - 1):
-            if self.xgrid[ii] > self.tDE:
+            if self.xgrid[ii] > self.tDE and self.xgrid[ii] < self.tDE + self.tCH:
                 self.Qfree += self.Qfree_grid[ii] * (self.xgrid[ii + 1] - self.xgrid[ii - 1]) / 2
                 self.Qtail += self.Qtail_grid[ii] * (self.xgrid[ii + 1] - self.xgrid[ii - 1]) / 2
-        self.Qfree += self.Qfree_grid[-1] * (self.xgrid[-1] - self.xgrid[-2])
-        self.Qtail += self.Qtail_grid[-1] * (self.xgrid[-1] - self.xgrid[-2])
         return None
 
     def band_plotter(self, Vgs, Vy, mode='sp'):
@@ -362,6 +318,7 @@ def Id_full_sweep_parallel_v0(Vgs_sweep, fet_name, foo):
     t1 = time.time()
     outputs = multiple_workers(foo=foo, inputs=Vgs_sweep)
     t2 = time.time()
+    print()
     print('Time taken is ', t2 - t1, 's')
     # Id_sweep = np.array([id for id, qch in outputs])
     # Qch_sweep = np.array([qch for id, qch in outputs])
@@ -378,6 +335,7 @@ def IdVd_full_sweep_parallel_v0(Vds_sweep, fet_name, foo):
     t1 = time.time()
     outputs = multiple_workers(foo=foo, inputs=Vds_sweep)
     t2 = time.time()
+    print()
     print('Time taken is ', t2 - t1, 's')
     # Id_sweep = np.array([id for id, qch in outputs])
     # Qch_sweep = np.array([qch for id, qch in outputs])

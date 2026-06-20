@@ -26,7 +26,7 @@ from multiprocessing import Pool
 from sklearn.linear_model import LinearRegression
 
 def multiple_workers(foo, inputs):
-    pool = Pool(processes=32)
+    pool = Pool(processes=16)
     outputs = pool.map(foo, inputs)
     return outputs
 
@@ -354,7 +354,7 @@ def exponential_states(Nt, Tt, Ep, Ef, T, nature):
             warnings.simplefilter("always")
             result = exp((Ep - Ef) / phit)
             if len(w) > 0 and issubclass(w[-1].category, RuntimeWarning):
-                return True, inf
+                return True, None
             return False, result
 
     overflowed, z = check_exp_overflow(Ep, Ef, phit)
