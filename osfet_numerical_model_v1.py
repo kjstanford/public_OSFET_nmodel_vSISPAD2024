@@ -459,5 +459,5 @@ if __name__ == "__main__":
 
     plt.rcParams["figure.figsize"] = (13, 10)
     legend = [None]
-    logy_lin_plot(x=Vgs_all_mod, y=Id_all_mod, c=['k', 'r'], lw=4, s=['None', 'solid'], m=['o', 'None'], xlabel="$V_{GS} (V)$", ylabel="$Id (\mu A/\mu m)$", l=legend, ylim=[1e-8, 1e1], figname='Id.png')
-    logy_lin_plot(x=Vgs_all_mod[1:2] * 2, y=Qch_all_mod[:1] + Qf_all_mod[:1], c=['b', 'b'], lw=4, s=['solid', 'dashed'], m=['None', 'None'], xlabel="$V_{GS} (V)$", ylabel="$Qch (C)$", l=legend, figname='Qch.png')
+    logy_lin_plot(x=Vgs_all_mod, y=Id_all_mod, c=['k', 'r'], lw=4, s=['None', 'solid'], m=['o', 'None'], xlabel="$V_{GS} (V)$", ylabel="$Id (\mu A/\mu m)$", l=legend, ylim=[1e-8, 1e1], figname='Id_SGFET.png')
+    logy_lin_plot(x=Vgs_all_mod[1:2] * 2, y=Qch_all_mod[:1] + Qf_all_mod[:1], c=['b', 'b'], lw=4, s=['solid', 'dashed'], m=['None', 'None'], xlabel="$V_{GS} (V)$", ylabel="$Qch (C)$", l=legend, figname='Qch_SGFET.png')

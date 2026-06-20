@@ -26,7 +26,7 @@ from multiprocessing import Pool
 from sklearn.linear_model import LinearRegression
 
 def multiple_workers(foo, inputs):
-    pool = Pool(processes=16)
+    pool = Pool(processes=32)
     outputs = pool.map(foo, inputs)
     return outputs
 
